@@ -2,9 +2,11 @@ import time
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-Action = Literal["goto", "fill", "click", "double_click", "expect_url",
-                 "expect_text", "expect_no_text", "resize", "reload"]
-Category = Literal["functionality", "security", "reliability", "ux", "performance"]
+Action = Literal["goto", "navigate", "fill", "click", "double_click", "clear",
+                 "expect_url", "expect_text", "expect_no_text", "resize", "reload",
+                 "go_back", "go_forward"]
+Category = Literal["functionality", "functional", "security", "authentication",
+                   "authorization", "reliability", "ux", "performance"]
 Severity = Literal["critical", "high", "medium", "low"]
 
 
@@ -37,39 +39,56 @@ class AppMap(BaseModel):
     pages: list[Page] = Field(default_factory=list)
 
 
-# ---- Plan (internal) ----
+# ---- Action DSL & Attack Scenarios ----
 class Step(BaseModel):
     action: Action
     target: Optional[str] = None
     value: Optional[str] = None
+    url: Optional[str] = None  # convenient alias for navigate / goto value
 
 
-class TestCase(BaseModel):
+class AttackScenario(BaseModel):
     id: str
     category: Category
-    attack_type: str
-    rationale: str
-    severity_hint: Severity = "medium"
+    title: str
+    goal: str
+    preconditions: list[str] = Field(default_factory=list)
     steps: list[Step]
+    expected_behavior: str
+    severity_if_failed: Severity = "medium"
+    rationale: str = ""
+    confidence: float = 0.9
 
 
-# ---- Plan (LLM-facing). No defaults: the Gemini response_schema rejects them. ----
+# Alias TestCase to AttackScenario for backwards compatibility with Slice 1
+TestCase = AttackScenario
+
+
+# ---- LLM-facing Attack Schema (no defaults for Gemini response_schema compatibility) ----
 class LLMStep(BaseModel):
     action: Action
     target: Optional[str]
     value: Optional[str]
 
 
-class LLMTest(BaseModel):
+class LLMAttackScenario(BaseModel):
+    id: str
     category: Category
-    attack_type: str
-    rationale: str
-    severity: Severity
+    title: str
+    goal: str
     steps: list[LLMStep]
+    expected_behavior: str
+    severity_if_failed: Severity
+    rationale: str
 
 
-class LLMPlan(BaseModel):
-    tests: list[LLMTest]
+class LLMAttackPlan(BaseModel):
+    scenarios: list[LLMAttackScenario]
+
+
+# Backwards compatibility alias
+LLMTest = LLMAttackScenario
+LLMPlan = LLMAttackPlan
 
 
 # ---- Execution & findings ----
@@ -83,6 +102,7 @@ class Evidence(BaseModel):
 
 
 class TestResult(BaseModel):
+    __test__ = False
     test_id: str
     status: Literal["passed", "failed", "flaky", "error"]
     runs: int
@@ -107,6 +127,7 @@ class Finding(BaseModel):
     confidence: float
     evidence: Evidence
     steps: list[Step]
+    reproduction_steps: list[str] = Field(default_factory=list)
     suspected_files: list[str] = Field(default_factory=list)
     fix_status: str = "pending"
     verification_status: str = "pending"
@@ -126,10 +147,11 @@ class Run(BaseModel):
     status: Literal["running", "completed", "failed"] = "running"
     plan_source: str = ""
     app_map: Optional[AppMap] = None
-    tests: list[TestCase] = Field(default_factory=list)
+    tests: list[AttackScenario] = Field(default_factory=list)
     results: list[TestResult] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     events: list[Event] = Field(default_factory=list)
     error: Optional[str] = None
     started_at: float = Field(default_factory=time.time)
     finished_at: Optional[float] = None
+

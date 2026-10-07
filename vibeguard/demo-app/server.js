@@ -35,7 +35,7 @@ app.post("/login", (req, res) => {
 
 app.get("/register", (req, res) =>
   res.send(layout("Register", `<h1>Create account</h1>
-<form method="post" action="/register">
+<form method="post" action="/register" novalidate>
 <label for="name">Name</label><input id="name" name="name" type="text">
 <label for="remail">Email</label><input id="remail" name="email" type="email">
 <button type="submit">Register</button></form>`)));
@@ -44,7 +44,8 @@ app.post("/register", (req, res) => res.redirect("/login"));
 
 app.get("/dashboard", (req, res) => {
   const user = sessionUser(req) || "guest";
-  res.send(layout("Dashboard", `<h1>Dashboard</h1><p>Welcome, ${esc(user)}</p>`));
+  res.send(layout("Dashboard", `<h1>Dashboard</h1><p>Welcome, ${esc(user)}</p>
+<p><a href="/logout">Logout</a> <button id="refresh" type="button">Refresh</button> <button id="settings" type="button">Settings</button></p>`));
 });
 
 app.get("/logout", (req, res) => {

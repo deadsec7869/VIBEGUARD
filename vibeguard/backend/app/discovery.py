@@ -63,9 +63,12 @@ async def discover(browser, base_url: str, emit, max_pages: int = 15) -> AppMap:
             if status == 0 or (status >= 400 and path != "/"):
                 continue
             final_path = urlparse(page.url).path or "/"
-            redirected_to_known = final_path != path and final_path in seen_final
+            redirected = final_path != path
+            if redirected and final_path not in queued:
+                queued.add(final_path)
+                queue.append(final_path)
             elements, links, text = [], [], ""
-            if not redirected_to_known:
+            if not redirected:
                 raw = await page.evaluate(EXTRACT_JS)
                 elements = [Element(**r) for r in raw]
                 for r in raw:
@@ -81,7 +84,7 @@ async def discover(browser, base_url: str, emit, max_pages: int = 15) -> AppMap:
             pages.append(Page(path=path, final_path=final_path, status=status,
                               title=await page.title(), elements=elements,
                               links=sorted(set(links)), text_excerpt=text))
-            note = f" -> redirected to {final_path}" if final_path != path else ""
+            note = f" -> redirected to {final_path}" if redirected else ""
             emit("discovery", f"{path} [{status}] {len(elements)} elements{note}")
     finally:
         await ctx.close()

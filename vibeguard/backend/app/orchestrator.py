@@ -48,13 +48,14 @@ async def run_scan(target_url: str, replay: bool = False) -> Run:
                 run.app_map = await discover(browser, run.target_url, emit)
                 if not run.app_map.pages:
                     raise RuntimeError(f"No pages reachable at {run.target_url}. Is the app running?")
+                emit("vibe_attack", "Planning Vibe Attack scenarios...")
                 run.tests, run.plan_source = await make_plan(llm, run.app_map, emit)
                 run.results = await execute_all(browser, run.target_url, run.tests, art, emit)
             finally:
                 await browser.close()
         run.findings = build_findings(run.tests, run.results)
         run.status = "completed"
-        emit("system", f"Scan complete: {len(run.findings)} finding(s) from {len(run.tests)} tests "
+        emit("system", f"Vibe Attack complete: {len(run.findings)} finding(s) from {len(run.tests)} attacks "
                        f"(plan source: {run.plan_source})")
     except Exception as e:
         run.status, run.error = "failed", f"{type(e).__name__}: {e}"

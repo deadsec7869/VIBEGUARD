@@ -42,10 +42,13 @@ def _path(url: str) -> str:
 async def do_step(page, base_url: str, s: Step):
     """Returns (ok, expected, actual). Actions return (True, None, None)."""
     a = s.action
-    if a == "goto":
-        await page.goto(base_url + s.value, wait_until="load", timeout=10000)
+    if a in ("goto", "navigate"):
+        target_path = s.value or s.url or "/"
+        await page.goto(base_url + target_path, wait_until="load", timeout=10000)
     elif a == "fill":
-        await locate(page, s.target).fill(s.value, timeout=ACTION_TIMEOUT)
+        await locate(page, s.target).fill(s.value or "", timeout=ACTION_TIMEOUT)
+    elif a == "clear":
+        await locate(page, s.target).fill("", timeout=ACTION_TIMEOUT)
     elif a in ("click", "double_click"):
         loc = locate(page, s.target)
         if a == "click":
@@ -61,6 +64,10 @@ async def do_step(page, base_url: str, s: Step):
         await page.set_viewport_size({"width": int(w), "height": int(h)})
     elif a == "reload":
         await page.reload(wait_until="load")
+    elif a == "go_back":
+        await page.go_back(wait_until="load", timeout=5000)
+    elif a == "go_forward":
+        await page.go_forward(wait_until="load", timeout=5000)
     elif a == "expect_url":
         try:
             await page.wait_for_url(re.compile(re.escape(s.value)), timeout=2500)
@@ -79,7 +86,8 @@ async def do_step(page, base_url: str, s: Step):
 
 
 def describe(s: Step) -> str:
-    return " ".join(x for x in (s.action, s.target, (s.value or "")[:60]) if x)
+    val = s.value or s.url or ""
+    return " ".join(x for x in (s.action, s.target, val[:60]) if x)
 
 
 async def _attempt(browser, base_url: str, test: TestCase, shot: Path | None):
@@ -144,7 +152,9 @@ async def run_test(browser, base_url: str, test: TestCase, art_dir: Path) -> Tes
 async def execute_all(browser, base_url: str, tests: list[TestCase], art_dir: Path, emit):
     results = []
     for t in tests:
-        emit("executor", f"{t.id} [{t.attack_type}] {t.rationale}")
+        label = getattr(t, "title", None) or getattr(t, "rationale", "")
+        cat = getattr(t, "category", "attack")
+        emit("executor", f"{t.id} [{cat}] {label}")
         r = await run_test(browser, base_url, t, art_dir)
         lvl = "info" if r.status == "passed" else ("error" if r.status == "failed" else "warn")
         emit("executor", f"{t.id} -> {r.status.upper()} ({r.failures}/{r.runs} failing runs)", lvl)
