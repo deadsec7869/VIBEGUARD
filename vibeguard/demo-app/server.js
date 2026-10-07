@@ -43,6 +43,7 @@ app.get("/register", (req, res) =>
 app.post("/register", (req, res) => res.redirect("/login"));
 
 app.get("/dashboard", (req, res) => {
+  if (!sessionUser(req)) return res.redirect("/login");
   const user = sessionUser(req) || "guest";
   res.send(layout("Dashboard", `<h1>Dashboard</h1><p>Welcome, ${esc(user)}</p>
 <p><a href="/logout">Logout</a> <button id="refresh" type="button">Refresh</button> <button id="settings" type="button">Settings</button></p>`));

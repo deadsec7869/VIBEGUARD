@@ -144,6 +144,20 @@ class FixResult(BaseModel):
     verification_status: str = "pending"
 
 
+class VerificationResult(BaseModel):
+    finding_id: str
+    status: Literal["pending", "running", "verified", "rejected", "error"] = "pending"
+    confidence: float = 0.0
+    verifier_reason: str = ""
+    reproduction_steps: list[str] = Field(default_factory=list)
+    expected: str = ""
+    actual: str = ""
+    evidence: Optional[Evidence] = None
+    targeted_test_passed: bool = False
+    regression_passed: bool = False
+    verified_at: Optional[float] = None
+
+
 class Finding(BaseModel):
     id: str
     category: Category
@@ -162,6 +176,7 @@ class Finding(BaseModel):
     fix_status: str = "pending"
     verification_status: str = "pending"
     fix_result: Optional[FixResult] = None
+    verification_result: Optional[VerificationResult] = None
 
 
 class Event(BaseModel):

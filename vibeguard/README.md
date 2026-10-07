@@ -1,6 +1,14 @@
-# VibeGuard AI: Slice 2 (Vibe Attack)
+# VibeGuard AI: Slices 1–4
 
-Target App -> Discovery -> Vibe Attack Planner -> Structured Attack Scenarios -> Action DSL Validation -> Playwright Execution -> Evidence Collection -> Structured Findings.
+> 📖 Full, illustrated documentation lives in the [root README](../README.md).
+
+Target App -> Discovery -> Vibe Attack Planner -> Action DSL -> Playwright -> Evidence -> Findings -> Fix Agent (Slice 3) -> Independent Verification (Slice 4).
+
+```bash
+python -m app.cli http://localhost:3000          # attack → artifacts/<run_id>/run.json
+python -m app.cli_fix <run_id> VG-001            # Slice 3: fix (verification stays pending)
+python -m app.cli_verify <run_id> VG-001         # Slice 4: independent verification
+```
 
 ## Attack Categories Covered
 1. **Functional**: Empty required fields, malformed input (e.g. invalid email format), boundary/5000-char input, duplicate submission.
