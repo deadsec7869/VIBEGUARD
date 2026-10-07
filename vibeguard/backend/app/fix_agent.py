@@ -15,6 +15,7 @@ from .llm import LLM
 from .patch_manager import PatchManager
 from .process import TargetProcessManager
 from .executor import execute_all, run_test
+from .db import save_fix_result, update_finding_status
 
 
 FIX_PROMPT = """You are an autonomous VibeGuard Fix Agent.
@@ -227,6 +228,8 @@ async def run_fix_agent(
                 # Cleanup temp backup directory on success (preserving the applied code)
                 pm.cleanup()
                 target_pm.stop()
+                save_fix_result(run.id, result)
+                update_finding_status(run.id, finding.id, result.status, result.verification_status)
                 return result
                 
         except Exception as e:
@@ -240,4 +243,6 @@ async def run_fix_agent(
     finding.fix_status = result.status
     finding.verification_status = "pending"
     target_pm.stop()
+    save_fix_result(run.id, result)
+    update_finding_status(run.id, finding.id, result.status, result.verification_status)
     return result

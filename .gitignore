@@ -17,3 +17,6 @@ yarn-error.log*
 vibeguard/artifacts/
 artifacts/
 .pytest_cache/
+*.db
+*.sqlite
+*.sqlite3

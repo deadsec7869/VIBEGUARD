@@ -12,6 +12,10 @@ from .findings import build_findings
 from .llm import LLM
 from .models import Event, Run
 from .planner import make_plan
+from .db import (
+    create_run, update_run, save_attack, save_finding, append_event,
+    init_db, get_db_path
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS = Path(os.getenv("VIBEGUARD_ARTIFACTS", ROOT / "artifacts"))
@@ -34,12 +38,24 @@ async def run_scan(target_url: str, replay: bool = False) -> Run:
     art.mkdir(parents=True, exist_ok=True)
 
     def emit(stage: str, message: str, level: str = "info"):
-        run.events.append(Event(stage=stage, level=level, message=message))
+        event = Event(stage=stage, level=level, message=message)
+        run.events.append(event)
+        try:
+            append_event(run.id, stage, message, {"level": level})
+        except Exception as e:
+            print(f"Warning: Failed to persist event: {e}")
         print(f"[{time.strftime('%H:%M:%S')}] {stage:<9} {message}")
+
+    try:
+        init_db(get_db_path())
+        create_run(run)
+    except Exception as e:
+        emit("system", f"Failed to persist run: {e}", "error")
 
     if replay:
         emit("system", "REPLAY MODE: using cached LLM responses", "warn")
     llm = LLM(CACHE_DIR, replay=replay)
+
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -50,10 +66,18 @@ async def run_scan(target_url: str, replay: bool = False) -> Run:
                     raise RuntimeError(f"No pages reachable at {run.target_url}. Is the app running?")
                 emit("vibe_attack", "Planning Vibe Attack scenarios...")
                 run.tests, run.plan_source = await make_plan(llm, run.app_map, emit)
+                for t in run.tests:
+                    save_attack(run.id, t, "pending")
                 run.results = await execute_all(browser, run.target_url, run.tests, art, emit)
+                for r in run.results:
+                    t = next((t for t in run.tests if t.id == r.test_id), None)
+                    if t:
+                        save_attack(run.id, t, r.status)
             finally:
                 await browser.close()
         run.findings = build_findings(run.tests, run.results)
+        for f in run.findings:
+            save_finding(run.id, f, attack_id=f.attack_id)
         run.status = "completed"
         emit("system", f"Vibe Attack complete: {len(run.findings)} finding(s) from {len(run.tests)} attacks "
                        f"(plan source: {run.plan_source})")
@@ -61,5 +85,9 @@ async def run_scan(target_url: str, replay: bool = False) -> Run:
         run.status, run.error = "failed", f"{type(e).__name__}: {e}"
         emit("system", run.error, "error")
     run.finished_at = time.time()
+    try:
+        update_run(run)
+    except Exception as e:
+        emit("system", f"Failed to update run status: {e}", "error")
     (art / "run.json").write_text(run.model_dump_json(indent=2))
     return run

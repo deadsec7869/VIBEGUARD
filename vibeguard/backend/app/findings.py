@@ -28,6 +28,7 @@ def build_findings(tests: list[AttackScenario], results: list[TestResult]) -> li
         out.append(
             Finding(
                 id=f"VG-{len(out) + 1:03d}",
+                attack_id=t.id,
                 category=t.category,
                 type=attack_type,
                 severity=severity,

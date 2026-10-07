@@ -10,7 +10,7 @@ class DummyEmit:
 
 @pytest.fixture
 def dummy_run():
-    return Run(
+    r = Run(
         id="dummy_run",
         target_url="http://localhost:3000",
         tests=[
@@ -36,10 +36,17 @@ def dummy_run():
             )
         ]
     )
+    from app.db.repositories import create_run
+    import sqlite3
+    try:
+        create_run(r)
+    except sqlite3.IntegrityError:
+        pass
+    return r
 
 @pytest.fixture
 def dummy_finding():
-    return Finding(
+    f = Finding(
         id="VG-001",
         category="authentication",
         type="authentication",
@@ -54,6 +61,9 @@ def dummy_finding():
         steps=[Step(action="navigate", value="/dashboard"), Step(action="expect_url", value="/login")],
         reproduction_steps=["1. navigate", "2. expect_url", "Result: Stayed on /dashboard"]
     )
+    from app.db.repositories import save_finding
+    save_finding("dummy_run", f)
+    return f
 
 @pytest.mark.asyncio
 async def test_successful_verification(tmp_path, dummy_run, dummy_finding, monkeypatch):

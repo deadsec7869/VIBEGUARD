@@ -160,6 +160,7 @@ class VerificationResult(BaseModel):
 
 class Finding(BaseModel):
     id: str
+    attack_id: Optional[str] = None
     category: Category
     type: str
     severity: Severity
