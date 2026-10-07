@@ -8,24 +8,30 @@ from urllib.parse import urlparse
 
 from playwright.async_api import TimeoutError as PWTimeout
 
-from .models import Evidence, Step, TestCase, TestResult
+from .models import AttackScenario, Evidence, Step, TestCase, TestResult
 
 REPEATS = 3
 ACTION_TIMEOUT = 5000
 
 
 def locate(page, target: str):
-    kind, _, rest = target.partition(":")
-    if kind == "label":
-        return page.get_by_label(rest).first
-    if kind == "role":
-        role, _, name = rest.partition(":")
-        return page.get_by_role(role, name=name).first
-    if kind == "text":
-        return page.get_by_text(rest).first
-    if kind == "css":
-        return page.locator(rest).first
-    raise ValueError(f"unsupported target: {target}")
+    if ":" in target:
+        kind, _, rest = target.partition(":")
+        if kind == "label":
+            return page.get_by_label(rest).first
+        if kind == "role":
+            role, _, name = rest.partition(":")
+            return page.get_by_role(role, name=name).first
+        if kind == "text":
+            return page.get_by_text(rest).first
+        if kind == "css":
+            return page.locator(rest).first
+        if kind == "id":
+            return page.locator(f"#{rest}").first
+        if kind == "name":
+            return page.locator(f"[name='{rest}']").first
+    # Fallback to direct CSS selector if no prefix matched
+    return page.locator(target).first
 
 
 async def _excerpt(page) -> str:
@@ -44,7 +50,12 @@ async def do_step(page, base_url: str, s: Step):
     a = s.action
     if a in ("goto", "navigate"):
         target_path = s.value or s.url or "/"
-        await page.goto(base_url + target_path, wait_until="load", timeout=10000)
+        full_url = (
+            target_path
+            if target_path.startswith("http://") or target_path.startswith("https://") or target_path.startswith("data:")
+            else base_url + target_path
+        )
+        await page.goto(full_url, wait_until="load", timeout=10000)
     elif a == "fill":
         await locate(page, s.target).fill(s.value or "", timeout=ACTION_TIMEOUT)
     elif a == "clear":

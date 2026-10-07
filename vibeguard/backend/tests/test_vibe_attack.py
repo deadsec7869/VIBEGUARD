@@ -187,3 +187,84 @@ def test_api_404_on_missing_run():
     client = TestClient(app)
     response = client.get("/api/runs/nonexistent123")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_playwright_executor_attack_actions():
+    import urllib.parse
+    from playwright.async_api import async_playwright
+    from app.executor import describe, do_step, locate
+
+    s = Step(action="fill", target="label:Email", value="test@example.com")
+    assert describe(s) == "fill label:Email test@example.com"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            html = """
+            <!DOCTYPE html>
+            <html>
+            <body>
+                <h1 id="title">Vibe Attack Target</h1>
+                <input id="input1" name="email_field" aria-label="User Email" value="" />
+                <button id="btn1">Submit</button>
+                <div id="status"></div>
+                <script>
+                    document.getElementById('btn1').addEventListener('click', () => {
+                        document.getElementById('status').innerText = 'Submitted: ' + document.getElementById('input1').value;
+                    });
+                </script>
+            </body>
+            </html>
+            """
+            data_url = "data:text/html;charset=utf-8," + urllib.parse.quote(html)
+
+            # 1. navigate / goto
+            ok, _, _ = await do_step(page, "", Step(action="goto", value=data_url))
+            assert ok is True
+
+            # 2. locate strategies
+            assert await locate(page, "label:User Email").count() == 1
+            assert await locate(page, "id:input1").count() == 1
+            assert await locate(page, "name:email_field").count() == 1
+            assert await locate(page, "#title").count() == 1
+
+            # 3. fill
+            ok, _, _ = await do_step(page, "", Step(action="fill", target="id:input1", value="hacker@vibeguard.io"))
+            assert ok is True
+            assert await locate(page, "id:input1").input_value() == "hacker@vibeguard.io"
+
+            # 4. clear
+            ok, _, _ = await do_step(page, "", Step(action="clear", target="id:input1"))
+            assert ok is True
+            assert await locate(page, "id:input1").input_value() == ""
+
+            # 5. fill again & click
+            await do_step(page, "", Step(action="fill", target="id:input1", value="break_me"))
+            ok, _, _ = await do_step(page, "", Step(action="click", target="id:btn1"))
+            assert ok is True
+
+            # 6. expect_text assertion passing
+            ok, _, _ = await do_step(page, "", Step(action="expect_text", value="Submitted: break_me"))
+            assert ok is True
+
+            # 7. expect_no_text assertion passing
+            ok, _, _ = await do_step(page, "", Step(action="expect_no_text", value="NonExistentTextHere"))
+            assert ok is True
+
+            # 8. expect_text assertion failing (detection of defect)
+            ok_fail, exp_fail, _ = await do_step(page, "", Step(action="expect_text", value="ExpectedNeverShownError"))
+            assert ok_fail is False
+            assert "text 'ExpectedNeverShownError' visible" in exp_fail
+
+            # 9. resize & reload
+            ok, _, _ = await do_step(page, "", Step(action="resize", value="800x600"))
+            assert ok is True
+            ok, _, _ = await do_step(page, "", Step(action="reload"))
+            assert ok is True
+
+            await page.close()
+        finally:
+            await browser.close()
+
