@@ -33,6 +33,7 @@ Targets MUST be copied verbatim from the `target` fields in the app map."""
 
 ATTACK_CATEGORIES_GUIDE = """Attack Categories & Goals:
 1. functional: empty required fields, malformed input (e.g. invalid email format), boundary/5000-char input, duplicate submission.
+   - For form input attacks (e.g. malformed email on registration), assert that registration does NOT complete (e.g. expect_no_text of post-registration landing/sign-in text) or that an explicit validation error is visible, rather than assuming URL preservation alone.
 2. authentication: direct protected-route access, revisit protected page after logout, invalid credentials.
 3. authorization: unauthorized resource access, parameter manipulation (e.g. ?user=admin or ?role=admin).
 4. reliability: refresh during workflow, unexpected back/forward navigation.
@@ -250,20 +251,21 @@ def fallback_attack_plan(m: AppMap) -> list[AttackScenario]:
         ]
         if reg_name:
             reg_steps.append(Step(action="fill", target=reg_name.target, value="Attack Tester"))
+        completion_marker = (login_btn.name if login_btn else None) or "Sign in"
         reg_steps.extend([
             Step(action="fill", target=reg_email.target, value="not-an-email"),
             Step(action="click", target=reg_btn.target),
-            Step(action="expect_url", value=register_path),
+            Step(action="expect_no_text", value=completion_marker),
         ])
         add(
             attack_id="ATTACK-FUNC-002",
             category="functional",
             title="Malformed email input validation",
-            goal="Verify registration rejects malformed email and requires valid format",
+            goal="Verify registration rejects malformed email and does not complete registration",
             steps=reg_steps,
-            expected_behavior="Reject invalid email; remain on registration page with validation error",
+            expected_behavior=f"Registration must not complete with malformed email (must not proceed to {completion_marker})",
             severity_if_failed="medium",
-            rationale="Registration endpoint must validate email syntax before accepting",
+            rationale="Registration endpoint must validate email syntax before completing registration and proceeding to sign in",
         )
     elif login_email and login_btn:
         add(

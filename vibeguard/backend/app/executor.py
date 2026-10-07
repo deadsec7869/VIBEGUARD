@@ -92,7 +92,7 @@ async def do_step(page, base_url: str, s: Step):
     elif a == "expect_no_text":
         await page.wait_for_timeout(300)
         if await page.get_by_text(s.value).count() > 0:
-            return False, f"text '{s.value}' absent", f"text '{s.value}' is visible on {_path(page.url)}"
+            return False, f"text '{s.value}' absent", f"text '{s.value}' is visible on {_path(page.url)}; page showed: {await _excerpt(page)}"
     return True, None, None
 
 
