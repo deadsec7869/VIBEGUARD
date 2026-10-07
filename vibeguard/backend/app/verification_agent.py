@@ -5,6 +5,7 @@ from playwright.async_api import async_playwright
 from .models import Finding, Run, VerificationResult, AttackScenario, TestResult
 from .process import TargetProcessManager
 from .executor import execute_all, run_test
+from .db import save_verification_result, update_finding_status
 
 async def run_verification_agent(
     finding: Finding,
@@ -66,6 +67,8 @@ async def run_verification_agent(
                 v_result.verifier_reason = f"The issue is still reproducible. Actual behavior: {r.actual}"
                 finding.verification_status = v_result.status
                 target_pm.stop()
+                save_verification_result(run.id, v_result)
+                update_finding_status(run.id, finding.id, finding.fix_status, v_result.status)
                 return v_result
             
             v_result.targeted_test_passed = True
@@ -82,6 +85,8 @@ async def run_verification_agent(
                 v_result.verifier_reason = f"Fix caused a regression on test {failed_regs[0].test_id}."
                 finding.verification_status = v_result.status
                 target_pm.stop()
+                save_verification_result(run.id, v_result)
+                update_finding_status(run.id, finding.id, finding.fix_status, v_result.status)
                 return v_result
             
             v_result.regression_passed = True
@@ -93,6 +98,8 @@ async def run_verification_agent(
             finding.verification_status = v_result.status
             
             target_pm.stop()
+            save_verification_result(run.id, v_result)
+            update_finding_status(run.id, finding.id, finding.fix_status, v_result.status)
             return v_result
             
     except Exception as e:
@@ -101,5 +108,7 @@ async def run_verification_agent(
         v_result.verifier_reason = f"Execution error: {str(e)}"
         finding.verification_status = v_result.status
         target_pm.stop()
+        save_verification_result(run.id, v_result)
+        update_finding_status(run.id, finding.id, finding.fix_status, v_result.status)
         return v_result
 
