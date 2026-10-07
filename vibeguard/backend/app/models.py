@@ -114,6 +114,36 @@ class TestResult(BaseModel):
     evidence: Evidence = Field(default_factory=Evidence)
 
 
+# ---- Fix Agent Models ----
+class PatchOperation(BaseModel):
+    file: Optional[str] = None
+    type: Literal["replace"] = "replace"
+    old_text: str
+    new_text: str
+    expected_matches: int = 1
+
+
+class StructuredPatch(BaseModel):
+    file: str
+    operations: list[PatchOperation]
+
+
+class FixResult(BaseModel):
+    finding_id: str
+    status: Literal["pending", "analyzing", "patching", "retesting", "regression_testing", "fixed", "failed", "regression_failed"] = "pending"
+    attempts: int = 0
+    root_cause: str = ""
+    files_changed: list[str] = Field(default_factory=list)
+    patch_summary: str = ""
+    diff: str = ""
+    patch_operations: list[PatchOperation] = Field(default_factory=list)
+    targeted_test: dict = Field(default_factory=dict)
+    targeted_test_passed: bool = False
+    regression_test: dict = Field(default_factory=dict)
+    regression_passed: bool = False
+    verification_status: str = "pending"
+
+
 class Finding(BaseModel):
     id: str
     category: Category
@@ -131,6 +161,7 @@ class Finding(BaseModel):
     suspected_files: list[str] = Field(default_factory=list)
     fix_status: str = "pending"
     verification_status: str = "pending"
+    fix_result: Optional[FixResult] = None
 
 
 class Event(BaseModel):
