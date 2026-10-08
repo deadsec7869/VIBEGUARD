@@ -8,7 +8,8 @@
 
 <br/>
 
-![Slice](https://img.shields.io/badge/Slice-4%20%C2%B7%20Independent%20Verification-7C3AED?style=for-the-badge)
+![Slice](https://img.shields.io/badge/Slice-5%20%C2%B7%20SQLite%20Persistence-7C3AED?style=for-the-badge)
+![SQLite](https://img.shields.io/badge/SQLite-WAL%20Persistence-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?style=for-the-badge&logo=playwright&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini-Planner%20%26%20Fixer-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white)
@@ -108,6 +109,12 @@ flowchart TB
         VER["verification_agent.py"]
     end
 
+    subgraph Storage["💾 Persistence & State"]
+        DB["db/database.py · WAL SQLite"]
+        SCH["db/schema.py · DDL & Migrations"]
+        REP["db/repositories.py · Repositories"]
+    end
+
     subgraph Data["📦 Contracts"]
         MOD["models.py · Pydantic"]
         FND["findings.py"]
@@ -125,6 +132,10 @@ flowchart TB
     CLIV --> VER
     VER --> PROC
     VER --> EXEC
+    ORCH --> REP
+    FIX --> REP
+    VER --> REP
+    REP --> DB
 ```
 
 </details>
@@ -141,7 +152,8 @@ VibeGuard is built in **vertical slices** — each one end-to-end, each one pres
 | **2** | ⚔️ Vibe Attack | `AppMap → Adversarial Scenarios → Evidence → Findings` | ✅ |
 | **3** | 🩹 Fix Agent | `Finding → Diagnose → Patch → Restart → Retest → Regression → FIXED` | ✅ |
 | **4** | 🔒 Independent Verification | `FIXED → Fresh Context → Reproduce → Regression → VERIFIED / REJECTED` | ✅ |
-| 5+ | 📊 Dashboard · SSE · SQLite · Reliability Score | — | 🔜 |
+| **5** | 💾 SQLite Persistence & Run Mgmt | `Runs → Attacks → Findings → Fixes → Verification → Event Stream in SQLite` | ✅ |
+| 6+ | 📊 Live SSE Dashboard · Reliability Score | — | 🔜 |
 
 <details>
 <summary><b>🔍 Slice 1 — Discovery & Action DSL</b></summary>
@@ -238,6 +250,27 @@ The Verification Agent **shares no state with the Fix Agent**. It:
 3. Rebuilds the targeted test **from the original finding's steps** — not from the fixer's claims.
 4. Runs a deterministic regression suite (same-category + baseline tests).
 5. Emits `verified` (confidence `1.0`) or `rejected` with a reason and fresh evidence.
+
+</details>
+
+<details>
+<summary><b>💾 Slice 5 — SQLite Persistence & Run Management</b></summary>
+
+<br/>
+
+VibeGuard persists runs, attacks, structured findings, fix iterations, verifications, and audit events into a high-concurrency relational store:
+
+- **Engine**: SQLite with Write-Ahead Logging (`PRAGMA journal_mode = WAL;`) and enforced Foreign Keys (`PRAGMA foreign_keys = ON;`).
+- **Storage Location**: Defaults to `artifacts/vibeguard.db`, configurable via `VIBEGUARD_DB_PATH`.
+- **Relational Tables**:
+  - `runs`: Run metadata, target URL, status (`running`, `completed`, `failed`), plan source, timestamps.
+  - `attacks`: Generated adversarial scenarios with payloads and execution statuses.
+  - `findings`: Identified security/functional defects with JSON evidence and DSL reproduction steps.
+  - `fix_results`: Fix attempts, diagnosed root causes, structured patch operations, and regression test status.
+  - `verification_results`: Independent verifier outcomes, confidence scores, reasons, and evidence.
+  - `events`: Append-only chronological event stream (`run_started`, `attack_completed`, `finding_discovered`, etc.) for auditability and real-time dashboarding.
+- **Repository Pattern** (`app/db/repositories.py`): Clean typed CRUD operations with seamless Pydantic model serialization.
+- **Automatic Schema Migration**: Idempotent initialization that ensures backward compatibility across schema changes.
 
 </details>
 
@@ -380,6 +413,7 @@ python -m pytest
 | `test_vibe_attack.py` | Planner, DSL validation, attack semantics, findings |
 | `test_patch_manager.py` | Exact-match, ambiguity rejection, path jail, rollback |
 | `test_verification_agent.py` | Verified / rejected / regression / error paths |
+| `test_db.py` | SQLite schema, relational foreign keys, runs, attacks, findings, fixes, verifications, events, migrations |
 
 ---
 
@@ -449,6 +483,11 @@ vibeguard-slice1/
     │   │   ├── llm.py                 ✨  Gemini client + prompt-hash cache
     │   │   ├── orchestrator.py        🎼  pipeline + localhost safety guard
     │   │   ├── models.py              📦  Pydantic contracts
+    │   │   ├── db/                    💾  SQLite persistence & repositories
+    │   │   │   ├── database.py        🔌  WAL connection factory
+    │   │   │   ├── init.py            🚀  auto-init helper
+    │   │   │   ├── repositories.py    📚  CRUD for runs, attacks, findings, fixes, verifications, events
+    │   │   │   └── schema.py          📐  relational DDL & migrations
     │   │   └── main.py                🌐  FastAPI
     │   ├── tests/                     🧪  pytest suites
     │   └── requirements.txt
@@ -476,8 +515,8 @@ vibeguard-slice1/
 - [x] Slice 2 — Vibe Attack & evidence-backed findings
 - [x] Slice 3 — Fix Agent with structured patching
 - [x] Slice 4 — Independent Verification Agent
+- [x] Slice 5 — SQLite run persistence & event tracking
 - [ ] Live dashboard with SSE event streaming
-- [ ] SQLite run persistence
 - [ ] Reliability score
 
 ---
