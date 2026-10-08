@@ -20,11 +20,18 @@ def _json_load(data: Optional[str]) -> Any:
 
 # --- RUNS ---
 def create_run(run: Run):
+    created_at = getattr(run, "created_at", None) or run.started_at
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO runs (run_id, target_url, status, plan_source, error, created_at, started_at, completed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (run.id, run.target_url, run.status, run.plan_source, run.error, run.started_at, run.started_at, run.finished_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(run_id) DO UPDATE SET
+                   target_url=excluded.target_url,
+                   status=excluded.status,
+                   plan_source=excluded.plan_source,
+                   error=excluded.error,
+                   completed_at=excluded.completed_at""",
+            (run.id, run.target_url, run.status, run.plan_source, run.error, created_at, run.started_at, run.finished_at)
         )
         conn.commit()
 
@@ -35,6 +42,18 @@ def update_run(run: Run):
             (run.status, run.plan_source, run.error, run.finished_at, run.id)
         )
         conn.commit()
+
+def get_runs() -> List[Dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM runs ORDER BY created_at DESC"""
+        ).fetchall()
+        runs = []
+        for r in rows:
+            d = dict(r)
+            d["id"] = d["run_id"]
+            runs.append(d)
+        return runs
 
 # --- ATTACKS ---
 def save_attack(run_id: str, attack: AttackScenario, status: str = "pending"):
@@ -90,7 +109,15 @@ def get_finding(run_id: str, finding_id: str) -> Optional[Dict[str, Any]]:
             """SELECT * FROM findings WHERE run_id=? AND finding_id=?""",
             (run_id, finding_id)
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        d["id"] = d["finding_id"]
+        if d.get("evidence_json"):
+            d["evidence"] = _json_load(d["evidence_json"])
+        if d.get("reproduction_steps_json"):
+            d["reproduction_steps"] = _json_load(d["reproduction_steps_json"])
+        return d
 
 def get_findings(run_id: str) -> List[Dict[str, Any]]:
     with get_connection() as conn:
@@ -98,7 +125,16 @@ def get_findings(run_id: str) -> List[Dict[str, Any]]:
             """SELECT * FROM findings WHERE run_id=?""",
             (run_id,)
         ).fetchall()
-        return [dict(r) for r in rows]
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["id"] = d["finding_id"]
+            if d.get("evidence_json"):
+                d["evidence"] = _json_load(d["evidence_json"])
+            if d.get("reproduction_steps_json"):
+                d["reproduction_steps"] = _json_load(d["reproduction_steps_json"])
+            results.append(d)
+        return results
 
 # --- FIX RESULTS ---
 def save_fix_result(run_id: str, fix: FixResult):
@@ -106,9 +142,17 @@ def save_fix_result(run_id: str, fix: FixResult):
         conn.execute(
             """INSERT OR REPLACE INTO fix_results (finding_id, run_id, status, attempts, root_cause, files_changed_json, patch_summary, diff, patch_operations_json, targeted_test_passed, regression_passed, verification_status, error, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (fix.finding_id, run_id, fix.status, fix.attempts, fix.root_cause, _json_dump(fix.files_changed), fix.patch_summary, fix.diff, _json_dump(fix.patch_operations), fix.targeted_test_passed, fix.regression_passed, fix.verification_status, None, time.time())
+            (fix.finding_id, run_id, fix.status, fix.attempts, fix.root_cause, _json_dump(fix.files_changed), fix.patch_summary, fix.diff, _json_dump(fix.patch_operations), fix.targeted_test_passed, fix.regression_passed, fix.verification_status, getattr(fix, "error", None), time.time())
         )
         conn.commit()
+
+def get_fix_result(run_id: str, finding_id: str) -> Optional[Dict[str, Any]]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT * FROM fix_results WHERE run_id=? AND finding_id=?""",
+            (run_id, finding_id)
+        ).fetchone()
+        return dict(row) if row else None
 
 # --- VERIFICATION RESULTS ---
 def save_verification_result(run_id: str, v: VerificationResult):
@@ -135,7 +179,11 @@ def get_run(run_id: str) -> Optional[Dict[str, Any]]:
             """SELECT * FROM runs WHERE run_id=?""",
             (run_id,)
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        d["id"] = d["run_id"]
+        return d
 
 def get_attacks(run_id: str) -> List[Dict[str, Any]]:
     with get_connection() as conn:
@@ -150,5 +198,13 @@ def get_events(run_id: str) -> List[Dict[str, Any]]:
         rows = conn.execute(
             """SELECT * FROM events WHERE run_id=? ORDER BY event_id ASC""",
             (run_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def get_events_after(run_id: str, last_event_id: int) -> List[Dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM events WHERE run_id=? AND event_id > ? ORDER BY event_id ASC""",
+            (run_id, last_event_id)
         ).fetchall()
         return [dict(r) for r in rows]

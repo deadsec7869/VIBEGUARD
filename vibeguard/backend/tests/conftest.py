@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from app.db.schema import init_db
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="function")
 def setup_test_db():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)

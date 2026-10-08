@@ -31,9 +31,13 @@ def assert_safe_target(url: str) -> None:
         raise PermissionError("Refusing non-localhost target. Set VIBEGUARD_ALLOW_REMOTE=1 only for systems you own.")
 
 
-async def run_scan(target_url: str, replay: bool = False) -> Run:
+async def run_scan(target_url: str, replay: bool = False, run: Optional[Run] = None) -> Run:
     assert_safe_target(target_url)
-    run = Run(id=uuid.uuid4().hex[:8], target_url=target_url.rstrip("/"), replay=replay)
+    init_db(get_db_path())
+    if run is None:
+        run = Run(id=uuid.uuid4().hex[:8], target_url=target_url.rstrip("/"), replay=replay)
+        create_run(run)
+
     art = ARTIFACTS / run.id
     art.mkdir(parents=True, exist_ok=True)
 
@@ -46,12 +50,7 @@ async def run_scan(target_url: str, replay: bool = False) -> Run:
             print(f"Warning: Failed to persist event: {e}")
         print(f"[{time.strftime('%H:%M:%S')}] {stage:<9} {message}")
 
-    try:
-        init_db(get_db_path())
-        create_run(run)
-    except Exception as e:
-        emit("system", f"Failed to persist run: {e}", "error")
-
+    emit("system", f"Run {run.id} started for target {run.target_url}")
     if replay:
         emit("system", "REPLAY MODE: using cached LLM responses", "warn")
     llm = LLM(CACHE_DIR, replay=replay)

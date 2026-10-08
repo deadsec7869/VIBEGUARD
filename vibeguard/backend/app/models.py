@@ -142,6 +142,7 @@ class FixResult(BaseModel):
     regression_test: dict = Field(default_factory=dict)
     regression_passed: bool = False
     verification_status: str = "pending"
+    error: Optional[str] = None
 
 
 class VerificationResult(BaseModel):
@@ -189,6 +190,7 @@ class Event(BaseModel):
 
 class Run(BaseModel):
     id: str
+    run_id: Optional[str] = None
     target_url: str
     replay: bool = False
     status: Literal["running", "completed", "failed"] = "running"
@@ -199,6 +201,11 @@ class Run(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     events: list[Event] = Field(default_factory=list)
     error: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
     started_at: float = Field(default_factory=time.time)
     finished_at: Optional[float] = None
+
+    def model_post_init(self, __context):
+        if not self.run_id:
+            self.run_id = self.id
 
